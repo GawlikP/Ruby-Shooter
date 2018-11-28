@@ -1,4 +1,8 @@
 require "Gosu"
+
+$Rnd = Random.new();
+
+
 class Player
     attr_accessor :x, :y, :w, :h, :speed,:attack_speed,:attack_timer    # Accessors to variables of object
     attr_reader :is_shooting
@@ -9,9 +13,10 @@ class Player
         @h = 32.0;
         @vx = 0.0;          # vertical speed in x direction
         @speed = 1.0;
-        @attack_speed = 10.0;   # for attack blocking
+        @attack_speed = 300.0;   # for attack blocking
         @attack_timer = 0.0;    # not using yet
         @is_shooting = false
+        @can_attack = false;
     end
 
     def moving id
@@ -23,14 +28,24 @@ class Player
             @vx = 0.0;
         end
         if Gosu.button_down? Gosu::KB_SPACE     # Key for shooting
-            @is_shooting = true
-        else 
-            @is_shooting = false
+            if @can_attack 
+                @is_shooting = true
+                @can_attack = false
+            else 
+                @is_shooting = false
+            end
         end
     end
 
     def update dt
-        
+        if @attack_timer > @attack_speed
+            @can_attack = true
+            @attack_timer = 0.0
+        end
+        if not @can_attack
+            @attack_timer += dt;
+        end
+
         @x += @vx * dt;     # Metod updateing over time
     end
 
@@ -103,10 +118,27 @@ class Enemy
         @y = y;
         @w = 32;
         @h = 32;
+        @speed = 0.3
+        a = $Rnd.rand(2);
+        if a == 1
+            @direction = 'l'
+        else
+            @direction = 'r'
+        end
     end
 
-    def update(dt)
-            # empty for now
+    def update dt, l ,r
+            if @direction == 'l' and @x < l
+                @direction = 'r'
+            elsif @direction == 'r' and @x > r
+                @direction = 'l'
+            end
+            if @direction == 'l'
+                @x -= @speed * dt
+            elsif @direction == 'r'
+                @x += @speed * dt
+            end
+            @y += @speed/20 * dt
     end
 
     def is_hit(b)
@@ -130,15 +162,18 @@ class Enemies
     def add_enemy x,y
         @enemy.push(Enemy.new x, y);
     end
-    def update dt
+    def update dt, l,r
         @enemy.each do |x|
-            
+            x.update dt, l, r
         end
     end
     def hit_check bullets
         bullets.each do |y|
             @enemy.delete_if do |x|    # if bullet hit enemy we need to delete it
-                x.is_hit(y) 
+                if x.is_hit(y) and y.from == 'p' 
+                    bullets.delete(y)
+                    true
+                end
             end
         end    
     end
@@ -158,13 +193,17 @@ class Window < Gosu::Window
         @bullets = Bullets.new  # Creating bullets menager
         @enemies = Enemies.new  # the same for Enemies
             @enemies.add_enemy(10,10)   # add few enemies for test
-            @enemies.add_enemy(40,10)
+            for i in 0..40
+                    x = $Rnd.rand(900)+20
+                    y = $Rnd.rand(200)+20
+                    @enemies.add_enemy(x,y)
+            end
         @now = 0.0              # for delta time checking
         @last = Gosu.milliseconds();
         @dt = 0.0
     end
     def update
-        self.caption = "Bullets: #{Bullets.Count_of}";
+        self.caption = "FPS: #{Gosu.fps}";
         @now = Gosu.milliseconds(); 
         @dt = @now - @last      # geting time delta
         @last = Gosu.milliseconds();
@@ -176,8 +215,9 @@ class Window < Gosu::Window
             @bullets.add_bullet(@player.x,@player.y,0.5,'u','p');
         end
 
+        @enemies.update(@dt,20,1000)
         @enemies.hit_check @bullets.bullet
-
+        
     end
 
     def draw
